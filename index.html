@@ -1,0 +1,365 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CALiT: Vision Transformers Need Cross Aggregation for Patch Semantics</title>
+<meta name="description" content="CALiT rebuilds the CLS token of every ViT block from the patches' concepts in the FFN's expanded space, giving a CLS loss a direct route to every patch. Parameter-free cross aggregation plus local mixing improves patch semantics under supervised, self-supervised and vision-language training.">
+<meta property="og:title" content="CALiT: Vision Transformers Need Cross Aggregation for Patch Semantics">
+<meta property="og:description" content="A parameter-free change to the ViT FFN that gives a CLS loss a direct route to every patch, and improves patch semantics under supervised, self-supervised and vision-language training.">
+<meta property="og:type" content="website">
+<meta name="twitter:card" content="summary_large_image">
+<meta property="og:url" content="https://insait-institute.github.io/calit/">
+<meta property="og:image" content="https://insait-institute.github.io/calit/img/og.jpg">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='3' y='3' width='12' height='12' rx='2' fill='%234E79A7'/%3E%3Crect x='17' y='3' width='12' height='12' rx='2' fill='%23F28E2B'/%3E%3Crect x='3' y='17' width='12' height='12' rx='2' fill='%2359A14F'/%3E%3Crect x='17' y='17' width='12' height='12' rx='2' fill='%23B07AA1'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="style.css">
+<script src="page.js" defer></script>
+</head>
+<body>
+<div class="wrap">
+<header class="hero">
+  <p class="wordmark"><b>CALiT</b> &middot; Cross Aggregation and Local Mixing Transformer</p>
+  <h1>Vision Transformers Need Cross Aggregation for Patch Semantics</h1>
+  <p class="authors"><a href="https://ajadchhatkuli.github.io/">Ajad Chhatkuli<sup>1</sup></a><a href="https://pramishp.github.io/">Pramish Paudel<sup>1</sup></a><span>Deheng Zhang<sup>1</sup></span><span>Kanzhi Wu<sup>2</sup></span><span>Luc Van Gool<sup>1</sup></span><span>Danda Pani Paudel<sup>1</sup></span></p>
+  <p class="affils"><span><sup>1</sup>INSAIT, Sofia University &quot;St. Kliment Ohridski&quot;</span><span><sup>2</sup>vivo Mobile Communication Co., Ltd.</span></p>
+  <p class="logos"><img src="logos/insait.webp" height="60" alt="INSAIT" decoding="async"></p>
+  <div class="buttons"><span class="btn" aria-disabled="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zm-1 1.8L18.2 9H13zM8 12.5h8V14H8zm0 3.5h8v1.5H8z"/></svg>Paper <span class="soon">(soon)</span></span><span class="btn" aria-disabled="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3h9l5 5v13H5zm2 2v14h10V9h-4V5zm1.5 6.5h7V13h-7zm0 3h7V16h-7z"/></svg>arXiv <span class="soon">(soon)</span></span><span class="btn" aria-disabled="true"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>Code <span class="soon">(soon)</span></span><a class="btn" href="#bibtex"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 7h5v5c0 3-1.7 5.2-4.6 5.9l-.6-1.7c1.6-.5 2.4-1.6 2.5-3.2H6zm8 0h5v5c0 3-1.7 5.2-4.6 5.9l-.6-1.7c1.6-.5 2.4-1.6 2.5-3.2H14z"/></svg>BibTeX</a></div>
+</header>
+
+<figure class="fig teaser"><div class="pan"><img src="img/teaser.webp" width="2040" height="626" alt="Figure 1 of the paper: (a) Cityscapes linear-probe gains of CALiT over ViT for five pre-training setups at S and B scale; (b) gradient-agreement maps on two ImageNet images for ViT-S and CALiT-S; (c) mean gradient agreement inside and outside the object box for ViT-S, CAT-S and CALiT-S" decoding="async"></div>
+<figcaption class="caption"><b>(a)</b> Frozen-backbone linear probe on Cityscapes (mIoU) at S and B scale: circles are
+ViTs, squares CALiT, one colour per pre-training. <b>(b)</b> Cosine between the mean gradient inside the object box and
+each patch's gradient at block <i>L</i>&minus;1, for supervised ViT-S and CALiT-S after 200 epochs (green: aligned,
+indigo: opposing). ViT's gradient agrees with the object nearly everywhere, background included. <b>(c)</b> The same
+agreement inside and outside the box, mean and standard deviation over all 38.7k ImageNet-val images, for ViT-S,
+CAT-S (cross aggregation only) and CALiT-S.</figcaption></figure>
+
+<section id="abstract" class="text abstract">
+  <h2>Abstract</h2>
+  <p>A Vision Transformer (ViT) is tasked to learn both a useful global representation through the CLS token and distinct local semantics through patch tokens. Yet a loss on the CLS token does not always induce learning of <i>discriminative</i> patch tokens. We theoretically observe that a CLS-based loss induces low rank patch gradients and in practice, most patches receive similar gradients. Adding patch-based losses may not compensate for the strong unidirectional CLS induced gradients. Consequently, even under global-local objectives, patch updates can remain insufficiently differentiated and spatially correlated. We therefore introduce <i>cross-aggregation</i>, which redefines the CLS token by aggregating patch-level concept heads in the expanded FFN space of every block. This parameter-free operation adds only 0.6% FLOPs to ViT-S and more directly couples global semantics to patch tokens. Combined with local depth-wise convolutions, it further improves the patch semantics, in a variety of pre-training methods. Together, these components form the <i>Cross Aggregation and Local Mixing Transformer</i> (CALiT). CALiT consistently improves semantic probes under both global-only and global-local pre-training objectives and vision-language finetuning. In particular, CALiT improves thin class semantics mean IoU by double digits in many pre-training/linear probe pairs and provides moderate gains in all other local semantics.</p>
+</section>
+
+<section id="qualitative">
+  <h2>Qualitative results</h2>
+  <figure class="fig"><div class="pan"><img src="img/thin_pca.webp" width="2200" height="771" alt="Two Cityscapes val images with a zoomed region: patch-feature PCA and segmentation for DINO ViT-S/16 against CALiT-S (DINO), and iBOT ViT-S/16 against CALiT-S (iBOT)" loading="lazy" decoding="async"></div>
+  <figcaption class="caption"><b>Thin structures, DINO and iBOT at S/16.</b> Each row shows a Cityscapes val image, a
+  zoomed region (yellow box), the region's patch-feature PCA (top three components of the frozen last-layer features,
+  as RGB) and its segmentation (ground truth and each model's linear-probe prediction). The baselines miss the
+  bicycle and the person; CALiT recovers them.</figcaption></figure>
+
+  <h3>Patch features on random Cityscapes frames</h3>
+  <p class="note" style="margin-top:0">Six val frames drawn at random with a fixed seed, not selected. Pick a
+  pre-training and a frame.</p>
+  <div class="explorer" id="explorer" data-frames="munster_000106_000019,frankfurt_000001_057181,munster_000062_000019,munster_000129_000019,frankfurt_000001_062396,frankfurt_000000_009969">
+    <div class="triple">
+      <figure><img src="img/pca/munster_000106_000019/input.webp" width="640" height="640" alt="Cityscapes val frame munster_000106_000019, 1024 by 1024 crop" loading="lazy" decoding="async"><figcaption>input</figcaption></figure>
+      <figure><img src="img/pca/munster_000106_000019/deit_s.webp" width="640" height="640" alt="Patch-feature PCA of the baseline ViT" loading="lazy" decoding="async"><figcaption>DeiT-S/16</figcaption></figure>
+      <figure><img src="img/pca/munster_000106_000019/calit_s_sup.webp" width="640" height="640" alt="Patch-feature PCA of CALiT" loading="lazy" decoding="async"><figcaption class="ours">CALiT-S</figcaption></figure>
+    </div>
+  </div>
+  <p class="caption">Top three principal components of the frozen last-layer patch features, as RGB, on a
+  1024&times;1024 crop (64&times;64 patches). PCA is fitted per model and per image, so colours carry no meaning across
+  panels: compare the structure, such as poles, pedestrians and lane markings.</p>
+</section>
+
+<section id="method">
+  <h2>Method</h2>
+  <p class="lead" style="margin:0 auto 30px">CALiT changes only the FFN. After <code>fc1</code> and GELU, each token's
+  4<i>D</i>-wide hidden is read as <i>S</i> slots of concepts, and two light modules act on it in parallel before
+  <code>fc2</code>.</p>
+  <div class="diagram" role="img" aria-label="Architecture. Left: a standard ViT block, multi-head self-attention then an FFN of fc1, GELU and fc2. Middle: a CALiT block, identical except that a CAg-parallel-LMix module sits between GELU and fc2. Right: inside that module, the CLS slots query all patch slots in a parameter-free cross aggregation, while the patch slots pass through a Dirac-initialised 3 by 3 depthwise convolution; both are recombined and projected by fc2.">
+    <div class="blocks"><svg class="dg" viewBox="0 0 600 330" aria-hidden="true">
+      <defs><marker id="ahA" viewBox="0 0 8 8" refX="7.5" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L8 4L0 8z" fill="#5d636a"/></marker></defs>
+      <!-- standard ViT block -->
+      <text class="ttl" x="140" y="20" text-anchor="middle">Standard ViT block</text>
+      <text class="sm" x="140" y="48" text-anchor="middle">[ CLS ; patches ]</text>
+      <path class="ar" d="M140 55V71" marker-end="url(#ahA)"/>
+      <rect class="bx" x="35" y="72" width="210" height="34" rx="4"/><text x="140" y="94" text-anchor="middle">multi-head self-attention</text>
+      <path class="ar" d="M140 106V121" marker-end="url(#ahA)"/>
+      <rect class="bx" x="35" y="122" width="210" height="26" rx="4"/><text x="140" y="140" text-anchor="middle">add &amp; norm</text>
+      <path class="ar" d="M140 148V163" marker-end="url(#ahA)"/>
+      <rect class="ffn" x="35" y="164" width="210" height="50" rx="5"/>
+      <rect class="bx" x="47" y="176" width="52" height="26" rx="3"/><text x="73" y="194" text-anchor="middle">fc1</text>
+      <rect class="bx" x="114" y="176" width="52" height="26" rx="3"/><text x="140" y="194" text-anchor="middle">GELU</text>
+      <rect class="bx" x="181" y="176" width="52" height="26" rx="3"/><text x="207" y="194" text-anchor="middle">fc2</text>
+      <path class="ar" d="M99 189H113" marker-end="url(#ahA)"/><path class="ar" d="M166 189H180" marker-end="url(#ahA)"/>
+      <path class="ar" d="M140 214V229" marker-end="url(#ahA)"/>
+      <rect class="bx" x="35" y="230" width="210" height="26" rx="4"/><text x="140" y="248" text-anchor="middle">add &amp; norm</text>
+      <path class="ar" d="M140 256V275" marker-end="url(#ahA)"/>
+      <text class="sm" x="140" y="292" text-anchor="middle">next block</text>
+      <!-- CALiT block -->
+      <text class="ttl" x="430" y="20" text-anchor="middle">CALiT block</text>
+      <text class="sm" x="430" y="48" text-anchor="middle">[ CLS ; patches ]</text>
+      <path class="ar" d="M430 55V71" marker-end="url(#ahA)"/>
+      <rect class="bx" x="325" y="72" width="210" height="34" rx="4"/><text x="430" y="94" text-anchor="middle">multi-head self-attention</text>
+      <path class="ar" d="M430 106V121" marker-end="url(#ahA)"/>
+      <rect class="bx" x="325" y="122" width="210" height="26" rx="4"/><text x="430" y="140" text-anchor="middle">add &amp; norm</text>
+      <path class="ar" d="M430 148V163" marker-end="url(#ahA)"/>
+      <rect class="ffn" x="298" y="164" width="264" height="50" rx="5"/>
+      <rect class="bx" x="306" y="176" width="42" height="26" rx="3"/><text x="327" y="194" text-anchor="middle">fc1</text>
+      <rect class="bx" x="359" y="176" width="50" height="26" rx="3"/><text x="384" y="194" text-anchor="middle">GELU</text>
+      <rect class="hi" x="420" y="171" width="88" height="36" rx="4"/><text class="b lab" x="464" y="194" text-anchor="middle">CAg &#8741; LMix</text>
+      <rect class="bx" x="518" y="176" width="36" height="26" rx="3"/><text x="536" y="194" text-anchor="middle">fc2</text>
+      <path class="ar" d="M348 189H358" marker-end="url(#ahA)"/><path class="ar" d="M409 189H419" marker-end="url(#ahA)"/><path class="ar" d="M508 189H517" marker-end="url(#ahA)"/>
+      <path class="ar" d="M430 214V229" marker-end="url(#ahA)"/>
+      <rect class="bx" x="325" y="230" width="210" height="26" rx="4"/><text x="430" y="248" text-anchor="middle">add &amp; norm</text>
+      <path class="ar" d="M430 256V275" marker-end="url(#ahA)"/>
+      <text class="sm" x="430" y="292" text-anchor="middle">next block</text>
+      <text class="lab it" x="430" y="318" text-anchor="middle">only the FFN changes</text>
+    </svg></div>
+    <div class="sep"></div>
+    <div class="zoom"><svg class="dg" viewBox="0 0 400 340" aria-hidden="true">
+      <defs><marker id="ahB" viewBox="0 0 8 8" refX="7.5" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L8 4L0 8z" fill="#5d636a"/></marker></defs>
+      <rect class="dot" x="6" y="6" width="388" height="300" rx="7"/>
+      <text class="b lab" x="18" y="28">CAg &#8741; LMix</text>
+      <text class="sm" x="382" y="28" text-anchor="end">post-GELU hidden, in slots</text>
+      <!-- CLS: one token, four concept slots -->
+      <text class="sm" x="105" y="102" text-anchor="middle">CLS</text>
+      <rect x="61" y="110" width="22" height="18" fill="#4e79a7" stroke="#fff" stroke-width="1"/><rect x="83" y="110" width="22" height="18" fill="#f28e2b" stroke="#fff" stroke-width="1"/><rect x="105" y="110" width="22" height="18" fill="#59a14f" stroke="#fff" stroke-width="1"/><rect x="127" y="110" width="22" height="18" fill="#b07aa1" stroke="#fff" stroke-width="1"/>
+      <rect class="tok" x="61" y="110" width="88" height="18"/>
+      <!-- patches: several tokens, the same four slots each -->
+      <text class="sm" x="295" y="66" text-anchor="middle">patches</text>
+      <g><rect x="251" y="74" width="22" height="18" fill="#4e79a7" stroke="#fff" stroke-width="1"/><rect x="273" y="74" width="22" height="18" fill="#f28e2b" stroke="#fff" stroke-width="1"/><rect x="295" y="74" width="22" height="18" fill="#59a14f" stroke="#fff" stroke-width="1"/><rect x="317" y="74" width="22" height="18" fill="#b07aa1" stroke="#fff" stroke-width="1"/></g>
+      <g><rect x="251" y="92" width="22" height="18" fill="#4e79a7" stroke="#fff" stroke-width="1"/><rect x="273" y="92" width="22" height="18" fill="#f28e2b" stroke="#fff" stroke-width="1"/><rect x="295" y="92" width="22" height="18" fill="#59a14f" stroke="#fff" stroke-width="1"/><rect x="317" y="92" width="22" height="18" fill="#b07aa1" stroke="#fff" stroke-width="1"/></g>
+      <g><rect x="251" y="110" width="22" height="18" fill="#4e79a7" stroke="#fff" stroke-width="1"/><rect x="273" y="110" width="22" height="18" fill="#f28e2b" stroke="#fff" stroke-width="1"/><rect x="295" y="110" width="22" height="18" fill="#59a14f" stroke="#fff" stroke-width="1"/><rect x="317" y="110" width="22" height="18" fill="#b07aa1" stroke="#fff" stroke-width="1"/></g>
+      <rect class="tok" x="251" y="74" width="88" height="54"/>
+      <!-- CLS -> CAg (queries); patches -> CAg (keys, values) and -> LMix -->
+      <path class="ar" d="M105 128V159" marker-end="url(#ahB)"/><text class="b" x="113" y="148">Q</text>
+      <path class="ar" d="M251 83H164V159" marker-end="url(#ahB)"/><text class="b" x="184" y="77">K, V</text>
+      <path class="ar" d="M295 128V159" marker-end="url(#ahB)"/>
+      <rect class="cag" x="22" y="160" width="166" height="74" rx="5"/>
+      <text class="b" x="105" y="183" text-anchor="middle">cross aggregation</text>
+      <text class="sm" x="105" y="203" text-anchor="middle">CLS&#8242; = MHA(Q, K, V)</text>
+      <text class="sm it" x="105" y="222" text-anchor="middle">parameter-free</text>
+      <rect class="lmx" x="212" y="160" width="166" height="74" rx="5"/>
+      <text class="b" x="295" y="183" text-anchor="middle">local mixing</text>
+      <text class="sm" x="295" y="203" text-anchor="middle">patches&#8242; = DWConv 3&#215;3</text>
+      <text class="sm it" x="295" y="222" text-anchor="middle">Dirac-init, patches only</text>
+      <!-- recombine, then fc2 -->
+      <path class="ar" d="M142 234V261" marker-end="url(#ahB)"/><path class="ar" d="M236 234V261" marker-end="url(#ahB)"/>
+      <rect class="bx" x="100" y="262" width="176" height="30" rx="4"/>
+      <path d="M188 266V288" stroke="#8f959c" stroke-dasharray="3 3"/>
+      <text x="144" y="282" text-anchor="middle">CLS&#8242;</text><text x="232" y="282" text-anchor="middle">patches&#8242;</text>
+      <path class="ar" d="M276 277H305" marker-end="url(#ahB)"/>
+      <rect class="bx" x="306" y="262" width="48" height="30" rx="4"/><text x="330" y="282" text-anchor="middle">fc2</text>
+      <path class="ar" d="M330 292V318" marker-end="url(#ahB)"/>
+      <text class="sm" x="330" y="334" text-anchor="middle">residual stream</text>
+    </svg></div>
+  </div>
+  <ul class="method-list">
+    <li class="cag"><b>Cross Aggregation (CAg).</b> The CLS slots attend over the slots of all patches: CLS slots are
+    the queries, patch slots both the keys and the values, with as many heads as self-attention. There are no
+    projection weights, so the operation is parameter-free and adds 0.6&nbsp;% FLOPs to ViT-S. A loss on the CLS token
+    now flows back to every patch through this softmax, besides the self-attention route.</li>
+    <li class="lmix"><b>Local Mixing (LMix).</b> A 3&times;3 depthwise convolution over the patch hiddens on their
+    &radic;<i>N</i>&times;&radic;<i>N</i> grid, one kernel per channel and no extra nonlinearity. It is
+    Dirac-initialised, so at step 0 the block computes cross aggregation alone. A depthwise convolution alone, as in
+    LocalViT, lowers the semantic probes on 3 of 4 datasets; added to CAg, it raises all four.</li>
+    <li class="cost"><b>Cost.</b> +0.75&nbsp;% parameters and +1.44&nbsp;% FLOPs for ViT-S, +0.40&nbsp;% and +1.03&nbsp;%
+    for ViT-B. <i>S</i>&nbsp;=&nbsp;4 slots for ViT-S and 8 for ViT-B (head size 64 and 32).</li>
+  </ul>
+  <div class="eq" aria-label="C prime equals multi-head attention with H heads of C, P, P; head a equals softmax of C a times P a transposed over root d h, times P a.">
+    <div class="row"><span class="part"><b class="bf">C</b>&#8242; = MHA<sub><var>H</var></sub>(<b class="bf">C</b>, <b class="bf">P</b>, <b class="bf">P</b>),</span>
+    <span class="part">head<sub><var>a</var></sub> = softmax&#8202;&#8202;<span class="paren">(</span><span class="frac"><span><b class="bf">C</b><sub><var>a</var></sub><b class="bf">P</b><span class="ss"><sup>&#8868;</sup><sub><var>a</var></sub></span></span><span>&radic;<var>d</var><sub><var>h</var></sub></span></span><span class="paren">)</span>&#8202;<b class="bf">P</b><sub><var>a</var></sub></span></div>
+    <span class="where"><b>C</b> &isin; &#8477;<sup><i>S</i>&times;4<i>D</i>/<i>S</i></sup>: the <i>S</i> slots of the CLS hidden.
+    <b>P</b> &isin; &#8477;<sup><i>NS</i>&times;4<i>D</i>/<i>S</i></sup>: the <i>S</i> slots of each of the <i>N</i> patch hiddens.
+    <i>d<sub>h</sub></i> = 4<i>D</i>/(<i>SH</i>).</span>
+  </div>
+  <details>
+    <summary>CALiT block, pseudocode</summary>
+<pre><span class="c"># x: (1+N, D) tokens, CLS first, patches on a √N×√N grid.  S slots, H heads (as in SA).</span>
+y       = x + SA(LN(x))
+h       = GELU(W1(LN(y)))              <span class="c"># (1+N, 4D)</span>
+h_c     = h[:1];  h_p = h[1:]          <span class="c"># split the CLS row from the N patch rows</span>
+
+<span class="c"># cross aggregation: parameter-free, MHA without projection weights</span>
+C       = h_c.reshape(S, 4D/S)         <span class="c"># CLS slots: queries</span>
+P       = h_p.reshape(N*S, 4D/S)       <span class="c"># patch slots: keys and values (un-mixed h_p)</span>
+h_c_new = MHA_H(C, P, P).reshape(1, 4D)
+
+<span class="c"># local mixing: depthwise 3×3, Dirac-initialised, patches only</span>
+G       = h_p.T.reshape(4D, √N, √N)
+h_p_new = DWConv3x3(G).reshape(4D, N).T
+
+z       = y + W2(concat[h_c_new, h_p_new])
+return z</pre>
+  </details>
+</section>
+
+<section id="gradients">
+  <h2>Patch gradients, measured</h2>
+  <p class="prose">We take the gradient of each model's own CLS loss with respect to the 196 patch tokens entering the
+  last block, on all 38,651 ImageNet-val images whose object box leaves at least one patch outside. Two questions:
+  how many directions does that gradient span, and does it single out the object?</p>
+  <div class="tablewrap"><table>
+<thead><tr><th rowspan="2">pre-training</th><th rowspan="2">CLS loss</th><th rowspan="2">2<i>n<sub>h</sub></i></th><th colspan="2" class="grp">effective rank &uarr;</th><th colspan="2" class="grp">contrast &uarr;</th><th rowspan="2">CALiT &gt; ViT</th></tr>
+<tr><th>ViT</th><th>CALiT</th><th>ViT</th><th>CALiT</th></tr></thead>
+<tbody class="g">
+<tr><td>supervised IN-1k, ViT-S/16</td><td>cross-entropy</td><td>12</td><td>12.1</td><td><b>37.0</b></td><td>0.22</td><td><b>0.56</b></td><td>91&nbsp;%</td></tr>
+<tr><td>iBOT IN-1k, ViT-S/16</td><td>CLS self-distillation</td><td>12</td><td>13.0</td><td><b>44.8</b></td><td>0.13</td><td><b>0.27</b></td><td>83&nbsp;%</td></tr>
+<tr><td>iBOT IN-1k, ViT-B/16</td><td>CLS self-distillation</td><td>24</td><td>20.3</td><td><b>53.1</b></td><td>0.12</td><td><b>0.25</b></td><td>82&nbsp;%</td></tr>
+</tbody>
+</table></div>
+  <p class="caption"><b>Structure of the patch gradient at the input of the last block.</b> <i>Effective rank</i>:
+  entropy-effective rank of the 196&times;<i>D</i> gradient matrix; a plain ViT is bounded by 2<i>n<sub>h</sub></i>
+  (two routes per head). <i>Contrast</i>: agreement with the mean in-box gradient direction, inside minus outside the
+  box, each patch weighted by its gradient norm. Last column: share of images on which CALiT's contrast exceeds
+  ViT's; its effective rank exceeds ViT's on &ge;&nbsp;99.9&nbsp;% of images.</p>
+
+  <h3>Gradient agreement, per model</h3>
+  <div data-tabs><div class="stack">
+    <figure class="fig" data-tab="Supervised, epoch 100"><div class="pan"><img src="img/grad_e100.webp" width="1712" height="629" alt="Gradient agreement maps and inside/outside bar chart for supervised ViT-S, CAT-S and CALiT-S at epoch 100" loading="lazy" decoding="async"></div><figcaption>Supervised ViT-S/16 family, epoch 100</figcaption></figure>
+    <figure class="fig" data-tab="Supervised, epoch 300"><div class="pan"><img src="img/grad_e300.webp" width="1712" height="629" alt="Gradient agreement maps and inside/outside bar chart for supervised ViT-S, CAT-S and CALiT-S at epoch 300" loading="lazy" decoding="async"></div><figcaption>Supervised ViT-S/16 family, epoch 300</figcaption></figure>
+    <figure class="fig" data-tab="iBOT ViT-S"><div class="pan"><img src="img/grad_ibot_s.webp" width="1611" height="629" alt="Gradient agreement maps and bar chart for iBOT ViT-S and CALiT-S under iBOT's CLS self-distillation loss" loading="lazy" decoding="async"></div><figcaption>iBOT, ViT-S/16, CLS self-distillation loss</figcaption></figure>
+    <figure class="fig" data-tab="iBOT ViT-B"><div class="pan"><img src="img/grad_ibot_b.webp" width="1611" height="629" alt="Gradient agreement maps and bar chart for iBOT ViT-B and CALiT-B under iBOT's CLS self-distillation loss" loading="lazy" decoding="async"></div><figcaption>iBOT, ViT-B/16, CLS self-distillation loss</figcaption></figure>
+  </div></div>
+  <ul class="method-list">
+    <li class="cost">ViT's patch gradients agree with the object direction inside <i>and</i> outside the box, and their
+    effective rank stays at or below the 2<i>n<sub>h</sub></i> bound (12 for S, 24 for B).</li>
+    <li class="cost">CALiT's effective rank is 2.6&ndash;3.6&times; ViT's, and its norm-weighted contrast is
+    1.6&ndash;2.6&times; higher, on 77&ndash;91&nbsp;% of images.</li>
+    <li class="cost">In the supervised models the rank gap is there from epoch 100 and stays constant, while the
+    contrast gap widens with training. Cross aggregation alone (CAT) already lifts the rank; local mixing adds
+    contrast.</li>
+  </ul>
+</section>
+
+<section id="results">
+  <h2>Results</h2>
+  <div class="stats good" style="margin:0 auto 34px">
+    <div class="stat"><span class="num">26/26</span><p>dense-probe comparisons won by CALiT over its ViT: 7 pre-training
+    setups on 4 datasets, wherever the baseline is reported.</p></div>
+    <div class="stat"><span class="num">+24.0</span><p>mIoU on Cityscapes for supervised ViT-S, the largest single
+    gain.</p></div>
+    <div class="stat"><span class="num">300</span><p>pre-training epochs for CALiT-S with DINO and iBOT, against 800
+    for the public ViT-S checkpoints it outperforms.</p></div>
+  </div>
+  <div class="tablewrap wide"><table>
+<thead><tr><th>model</th><th>pre-training (ep.)</th><th>IN-1k top-1</th><th>ADE20K &uarr;</th><th>VOC &uarr;</th><th>Cityscapes &uarr;</th><th>COCO-Stuff &uarr;</th></tr></thead>
+<tbody class="g">
+<tr class="sec"><td colspan="7">ViT-S/16 <i>&middot; supervised IN-1k</i></td></tr>
+<tr><td>DeiT-S/16</td><td>sup. 300</td><td>79.85</td><td>24.48</td><td>60.51</td><td>27.53</td><td>29.22</td></tr>
+<tr><td>LocalViT-S</td><td>sup. 300</td><td><b>80.83</b></td><td>20.23</td><td>49.85</td><td>40.01</td><td>22.41</td></tr>
+<tr><td>CAT-S <span class="u">(CAg only)</span></td><td>sup. 300</td><td>79.96</td><td>29.62</td><td>67.68</td><td>46.10</td><td>34.79</td></tr>
+<tr class="ours"><td>CALiT-S (ours)</td><td>sup. 300</td><td>80.57</td><td><b>31.65</b></td><td><b>71.50</b></td><td><b>51.56</b></td><td><b>36.68</b></td></tr>
+<tr class="delta"><td class="ab">&Delta; CALiT &minus; ViT</td><td></td><td>+0.72</td><td>+7.17</td><td>+10.99</td><td>+24.03</td><td>+7.46</td></tr>
+</tbody>
+<tbody class="g">
+<tr class="sec"><td colspan="7">ViT-S/16 <i>&middot; self-supervised IN-1k, iBOT</i></td></tr>
+<tr><td>iBOT ViT-S/16</td><td>iBOT 800</td><td><b>77.9</b> <span class="u">lp</span></td><td>29.78</td><td>66.67</td><td>49.09</td><td>34.71</td></tr>
+<tr class="ours"><td>CALiT-S (ours)</td><td>iBOT <b>300</b></td><td>76.3 <span class="u">lp</span></td><td><b>32.81</b></td><td><b>73.78</b></td><td><b>55.96</b></td><td><b>37.97</b></td></tr>
+<tr class="delta"><td class="ab">&Delta;</td><td></td><td class="neg">&minus;1.6</td><td>+3.03</td><td>+7.11</td><td>+6.87</td><td>+3.26</td></tr>
+</tbody>
+<tbody class="g">
+<tr class="sec"><td colspan="7">ViT-S/16 <i>&middot; self-supervised IN-1k, DINO</i></td></tr>
+<tr><td>DINO ViT-S/16</td><td>DINO 800</td><td><b>77.0</b> <span class="u">lp</span></td><td>23.79</td><td>50.41</td><td>45.89</td><td>26.08</td></tr>
+<tr class="ours"><td>CALiT-S (ours)</td><td>DINO <b>300</b></td><td>75.9 <span class="u">lp</span></td><td><b>27.45</b></td><td><b>61.47</b></td><td><b>49.36</b></td><td><b>31.48</b></td></tr>
+<tr class="delta"><td class="ab">&Delta;</td><td></td><td class="neg">&minus;1.1</td><td>+3.66</td><td>+11.06</td><td>+3.47</td><td>+5.40</td></tr>
+</tbody>
+<tbody class="g heavy">
+<tr class="sec"><td colspan="7">ViT-B/16 <i>&middot; supervised IN-1k</i></td></tr>
+<tr><td>DeiT-III-B<span class="src">*</span></td><td>sup. 400</td><td>81.8</td><td>25.4</td><td>61.7</td><td>48.9</td><td class="na">n/a</td></tr>
+<tr class="ours"><td>CALiT-B (ours)</td><td>sup. <b>300</b></td><td><b>82.20</b></td><td><b>32.23</b></td><td><b>71.88</b></td><td><b>53.09</b></td><td><b>37.31</b></td></tr>
+<tr class="delta"><td class="ab">&Delta;</td><td></td><td>+0.40</td><td>+6.83</td><td>+10.18</td><td>+4.19</td><td class="na">n/a</td></tr>
+</tbody>
+<tbody class="g">
+<tr class="sec"><td colspan="7">ViT-B/16 <i>&middot; self-supervised IN-1k, iBOT</i></td></tr>
+<tr><td>iBOT ViT-B/16</td><td>iBOT 400</td><td><b>79.5</b> <span class="u">lp</span></td><td>36.29</td><td>72.99</td><td>54.89</td><td>38.90</td></tr>
+<tr class="ours"><td>CALiT-B (ours)</td><td>iBOT <b>300</b></td><td>79.3 <span class="u">lp</span></td><td><b>37.25</b></td><td><b>75.82</b></td><td><b>59.66</b></td><td><b>41.08</b></td></tr>
+<tr class="delta"><td class="ab">&Delta;</td><td></td><td class="neg">&minus;0.2</td><td>+0.96</td><td>+2.83</td><td>+4.77</td><td>+2.18</td></tr>
+</tbody>
+<tbody class="g">
+<tr class="sec"><td colspan="7">ViT-B/16 <i>&middot; self-supervised IN-22K, DINOv2</i></td></tr>
+<tr><td>DINOv2 ViT-B/16<span class="src">*</span></td><td>DINOv2 600k</td><td><b>80.4</b> <span class="u">lp</span></td><td>38.3</td><td>76.6</td><td>58.4</td><td class="na">n/a</td></tr>
+<tr class="ours"><td>CALiT-B (ours)</td><td>DINOv2 600k</td><td>77.6 <span class="u">lp</span></td><td><b>38.73</b></td><td><b>77.37</b></td><td><b>64.44</b></td><td><b>41.51</b></td></tr>
+<tr class="delta"><td class="ab">&Delta;</td><td></td><td class="neg">&minus;2.8</td><td>+0.43</td><td>+0.77</td><td>+6.04</td><td class="na">n/a</td></tr>
+</tbody>
+<tbody class="g">
+<tr class="sec"><td colspan="7">ViT-B/16 <i>&middot; iBOT IN-1k, then vision-language fine-tuning (LeVLJEPA, DataComp-12M)</i></td></tr>
+<tr><td>iBOT ViT-B/16</td><td>iBOT 400 + VL 5k</td><td><b>44.78</b> <span class="u">zs</span></td><td>36.93</td><td>75.52</td><td>54.54</td><td>39.63</td></tr>
+<tr class="ours"><td>CALiT-B (ours)</td><td>iBOT 300 + VL 5k</td><td>44.65 <span class="u">zs</span></td><td><b>38.57</b></td><td><b>77.93</b></td><td><b>60.14</b></td><td><b>41.01</b></td></tr>
+<tr class="delta"><td class="ab">&Delta;</td><td></td><td class="neg">&minus;0.13</td><td>+1.64</td><td>+2.42</td><td>+5.60</td><td>+1.38</td></tr>
+</tbody>
+</table></div>
+  <p class="caption"><b>Semantic segmentation with a frozen backbone</b> (Table 1 of the paper). DINOv2-style linear
+  probe, a BatchNorm and a 1&times;1 convolution on the last-layer patch tokens, mIoU&nbsp;&uarr;. IN-1k top-1 is
+  measured as each baseline does: supervised accuracy, a linear probe (lp) for self-supervised models, zero-shot (zs)
+  after vision-language fine-tuning. &Delta;: CALiT minus the ViT of the same block. <span class="src">*</span> mIoU as
+  reported by Marouani et&nbsp;al. with the same probe. Bold: best per block. CALiT gives up a little ImageNet top-1
+  in 5 of the 7 settings, by 2.8 points at most (DINOv2-B).</p>
+</section>
+
+<section id="thin">
+  <h2>Thin structures</h2>
+  <p class="prose">The largest gains are on thin classes: fence, pole, traffic light, traffic sign, rider, motorcycle
+  and bicycle. We also probe ACDC, urban driving under fog, rain and snow, with the Cityscapes head (zero-shot) and with
+  a head trained on ACDC.</p>
+  <div class="tablewrap wide"><table>
+<thead><tr><th rowspan="2">model</th><th rowspan="2">pre-training (ep.)</th><th colspan="2" class="grp">Cityscapes val</th><th colspan="2" class="grp">ACDC zero-shot</th><th colspan="2" class="grp">ACDC trained</th></tr>
+<tr><th>all</th><th>thin</th><th>all</th><th>thin</th><th>all</th><th>thin</th></tr></thead>
+<tbody class="g">
+<tr class="sec"><td colspan="8">ViT-S/16 <i>&middot; supervised IN-1k</i></td></tr>
+<tr><td>DeiT-S/16</td><td>sup. 300</td><td>27.41</td><td>12.21</td><td>15.41</td><td>6.48</td><td>21.62</td><td>10.33</td></tr>
+<tr><td>CAT-S <span class="u">(CAg only)</span></td><td>sup. 300</td><td>46.10</td><td>29.90</td><td>25.44</td><td>12.22</td><td>37.42</td><td>20.01</td></tr>
+<tr class="ours"><td>CALiT-S (ours)</td><td>sup. 300</td><td><b>51.05</b></td><td><b>40.06</b></td><td><b>28.34</b></td><td><b>18.77</b></td><td><b>40.73</b></td><td><b>26.42</b></td></tr>
+<tr class="delta"><td class="ab">&Delta; CALiT &minus; ViT</td><td></td><td>+23.64</td><td>+27.85</td><td>+12.93</td><td>+12.29</td><td>+19.10</td><td>+16.09</td></tr>
+</tbody>
+<tbody class="g">
+<tr class="sec"><td colspan="8">ViT-S/16 <i>&middot; self-supervised IN-1k, iBOT</i></td></tr>
+<tr><td>iBOT ViT-S/16</td><td>iBOT 800</td><td>48.73</td><td>31.01</td><td>32.84</td><td>17.54</td><td>40.25</td><td>21.41</td></tr>
+<tr class="ours"><td>CALiT-S (ours)</td><td>iBOT <b>300</b></td><td><b>55.80</b></td><td><b>43.81</b></td><td><b>37.97</b></td><td><b>25.25</b></td><td><b>48.34</b></td><td><b>31.24</b></td></tr>
+<tr class="delta"><td class="ab">&Delta;</td><td></td><td>+7.07</td><td>+12.80</td><td>+5.13</td><td>+7.71</td><td>+8.09</td><td>+9.83</td></tr>
+</tbody>
+<tbody class="g">
+<tr class="sec"><td colspan="8">ViT-B/16 <i>&middot; self-supervised IN-1k, iBOT</i></td></tr>
+<tr><td>iBOT ViT-B/16</td><td>iBOT 400</td><td>54.75</td><td>37.15</td><td>36.28</td><td>22.30</td><td>47.00</td><td>26.77</td></tr>
+<tr class="ours"><td>CALiT-B (ours)</td><td>iBOT <b>300</b></td><td><b>58.46</b></td><td><b>47.66</b></td><td><b>38.45</b></td><td><b>26.15</b></td><td><b>53.03</b></td><td><b>37.91</b></td></tr>
+<tr class="delta"><td class="ab">&Delta;</td><td></td><td>+3.71</td><td>+10.51</td><td>+2.17</td><td>+3.85</td><td>+6.04</td><td>+11.13</td></tr>
+</tbody>
+</table></div>
+  <p class="caption"><b>Thin-structure segmentation and robustness</b> (mIoU&nbsp;&uarr;, linear probe as above).
+  <i>thin</i>: the 7 thin classes. <i>ACDC zero-shot</i>: the Cityscapes-trained head applied to ACDC val.
+  <i>ACDC trained</i>: a head trained from scratch on the 1600 ACDC training images for 4k iterations, evaluated
+  on the 400 val images.</p>
+
+</section>
+
+<section id="ablations">
+  <h2>Ablations</h2>
+  <div class="tablewrap"><table>
+<thead><tr><th>model</th><th>IN-1k top-1</th><th>ADE20K &uarr;</th><th>VOC &uarr;</th><th>Cityscapes &uarr;</th></tr></thead>
+<tbody class="g">
+<tr class="ours"><td>CALiT-S (reference)</td><td>80.57</td><td><b>31.65</b></td><td><b>71.50</b></td><td><b>51.56</b></td></tr>
+</tbody>
+<tbody class="g">
+<tr class="sec"><td colspan="5"><i>one change to CALiT-S, same recipe</i></td></tr>
+<tr><td class="ab">CAg in the last block only</td><td>79.54</td><td>25.99</td><td>60.78</td><td>43.86</td></tr>
+<tr><td class="ab">half-width CAg</td><td><i>80.64</i></td><td><i>29.83</i></td><td><i>67.29</i></td><td><i>50.76</i></td></tr>
+<tr><td class="ab">half-width CAg, no LMix</td><td>80.16</td><td>29.17</td><td>67.24</td><td>47.72</td></tr>
+<tr><td class="ab">mean-pool CAg (no attention)</td><td><b>80.73</b></td><td>29.54</td><td>66.47</td><td>48.19</td></tr>
+</tbody>
+<tbody class="g">
+<tr><td class="na">DeiT-S/16, for reference</td><td class="na">79.85</td><td class="na">24.48</td><td class="na">60.51</td><td class="na">27.53</td></tr>
+</tbody>
+</table></div>
+  <p class="caption"><b>Single-variable ablations of CALiT-S</b> (supervised IN-1k, linear probes as above; bold best,
+  italic second). Placed only in the last block, CAg loses most of the dense gain: the earlier blocks still get the
+  narrow gradient, so CAg belongs in every block. Applying CAg to half of the FFN width recovers most of the gain. A
+  uniform mean in place of attention loses patch quality, more than half-width CAg does.</p>
+</section>
+
+<section id="bibtex">
+  <h2>BibTeX</h2>
+  <div class="bib"><pre id="bibtex-entry">@article{chhatkuli2026calit,
+  title   = {Vision Transformers Need Cross Aggregation for Patch Semantics},
+  author  = {Chhatkuli, Ajad and Paudel, Pramish and Zhang, Deheng and
+             Wu, Kanzhi and Van Gool, Luc and Paudel, Danda Pani},
+  journal = {arXiv preprint},
+  year    = {2026}
+}</pre><button type="button" id="copy-bib">Copy</button></div>
+</section>
+
+<footer>Last updated 2026-10-01.</footer>
+</div>
+</body>
+</html>
